@@ -4,7 +4,9 @@ using Epsilon.Interface.Components;
 using Epsilon.Interface.Components.Text;
 using Epsilon.System;
 using Epsilon.System.Critical.Processing;
+using Epsilon.System.Debug;
 using Epsilon.System.Resources;
+using System;
 using System.Drawing;
 using System.IO;
 
@@ -23,9 +25,33 @@ namespace Epsilon.Applications.System
         {
             base.Start();
 
-            logInfo = File.ReadAllLines(ESystem.LoginInfoPath);
-            ustr = logInfo[0];
-            pstr = logInfo[1];
+            bool loginFileExists = false;
+            try
+            {
+                loginFileExists = File.Exists(ESystem.LoginInfoPath);
+                logInfo = loginFileExists
+                    ? File.ReadAllLines(ESystem.LoginInfoPath)
+                    : Array.Empty<string>();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("Failed to read login information: " + ex.Message);
+                logInfo = Array.Empty<string>();
+            }
+
+            if (logInfo.Length >= 2)
+            {
+                ustr = logInfo[0];
+                pstr = logInfo[1];
+            }
+            else
+            {
+                ustr = logInfo.Length > 0 ? logInfo[0] : string.Empty;
+                pstr = string.Empty;
+
+                if (loginFileExists)
+                    Log.Warning("Login information is incomplete. Falling back to guest mode.");
+            }
             ESystem.CurrentUser = null;
 
             win = new();

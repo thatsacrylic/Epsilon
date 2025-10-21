@@ -48,7 +48,6 @@ namespace Epsilon.Applications.System.Setup
                             string[] lines = new string[2];
                             lines[0] = username.Content.Trim();
                             lines[1] = password.Content.Trim();
-                            File.Create(ESystem.LoginInfoPath);
                             File.WriteAllLines(ESystem.LoginInfoPath,
                                 lines);
                             ESystem.CurrentUser = lines[0];

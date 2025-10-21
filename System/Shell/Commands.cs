@@ -9,7 +9,13 @@ namespace Epsilon.System.Shell
     {
         public static void Run(string input)
         {
-            string[] str = input.Split(' ');
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                Log.Error("No command specified.");
+                return;
+            }
+
+            string[] str = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (str.Length > 0)
             {
                 switch (str[0])
@@ -73,31 +79,80 @@ namespace Epsilon.System.Shell
                                     // fs d mk <dir>
                                     // fs d rm <dir>
                                     if (str.Length > 2)
+                                    {
                                         switch (str[2])
                                         {
                                             case "mk":
-                                                Directory.CreateDirectory(Kernel.curPath + "\\" + str[3]);
+                                                if (str.Length > 3)
+                                                {
+                                                    if (!TryGetSafePath(str[3], out var directoryPath))
+                                                        break;
+
+                                                    try
+                                                    {
+                                                        if (!Directory.Exists(directoryPath))
+                                                            Directory.CreateDirectory(directoryPath);
+                                                    }
+                                                    catch (Exception ex)
+                                                    {
+                                                        Log.Error("Failed to create directory: " + ex.Message);
+                                                    }
+                                                }
+                                                else
+                                                    Log.Error("No arguments specified. Use \"fs d mk <dir>\"");
                                                 break;
 
                                             case "rm":
-                                                Directory.Delete(Kernel.curPath + "\\" + str[3], true);
+                                                if (str.Length > 3)
+                                                {
+                                                    if (!TryGetSafePath(str[3], out var directoryPath))
+                                                        break;
+
+                                                    if (Directory.Exists(directoryPath))
+                                                    {
+                                                        try
+                                                        {
+                                                            Directory.Delete(directoryPath, true);
+                                                        }
+                                                        catch (Exception ex)
+                                                        {
+                                                            Log.Error("Failed to delete directory: " + ex.Message);
+                                                        }
+                                                    }
+                                                    else
+                                                        Log.Error("Directory not found: " + str[3] + " in " + Kernel.curPath);
+                                                }
+                                                else
+                                                    Log.Error("No arguments specified. Use \"fs d rm <dir>\"");
                                                 break;
 
                                             default:
                                                 Log.Error("Unknown command. Use \"fs dir <command> <arguments>\"");
                                                 break;
                                         }
+                                    }
                                     else Log.Error("No arguments specified. Use \"fs dir <command> <arguments>\"");
                                     break;
 
                                 case "wr":
                                     // write to file
                                     if (str.Length > 3)
-                                        File.WriteAllText(
-                                            Kernel.curPath + "\\" + str[2],
-                                            input.Replace(str[0] + " " + str[1] + " " + str[2] + " ", "")
-                                                 .Replace("\\n", "\n")
-                                        );
+                                    {
+                                        if (!TryGetSafePath(str[2], out var filePath))
+                                            break;
+
+                                        var content = GetCommandArguments(input, str, 3)
+                                            .Replace("\\n", "\n");
+
+                                        try
+                                        {
+                                            File.WriteAllText(filePath, content);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Log.Error("Failed to write file: " + ex.Message);
+                                        }
+                                    }
                                     else
                                         Log.Error("No arguments specified. Use \"fs wr <file> <content>\"");
                                     break;
@@ -106,7 +161,24 @@ namespace Epsilon.System.Shell
                                     // read from file
                                     Console.ForegroundColor = ConsoleColor.Gray;
                                     if (str.Length > 2)
-                                        Console.WriteLine(File.ReadAllText(Kernel.curPath + "\\" + str[2]));
+                                    {
+                                        if (!TryGetSafePath(str[2], out var filePath))
+                                            break;
+
+                                        if (File.Exists(filePath))
+                                        {
+                                            try
+                                            {
+                                                Console.WriteLine(File.ReadAllText(filePath));
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Log.Error("Failed to read file: " + ex.Message);
+                                            }
+                                        }
+                                        else
+                                            Log.Error("File not found: " + str[2] + " in " + Kernel.curPath);
+                                    }
                                     else
                                         Log.Error("No arguments specified. Use \"fs rd <file>\"");
                                     break;
@@ -114,10 +186,24 @@ namespace Epsilon.System.Shell
                                 case "rm":
                                     // delete file
                                     if (str.Length > 2)
-                                        if (File.Exists(Kernel.curPath + "\\" + str[2]))
-                                            File.Delete(Kernel.curPath + "\\" + str[2]);
+                                    {
+                                        if (!TryGetSafePath(str[2], out var filePath))
+                                            break;
+
+                                        if (File.Exists(filePath))
+                                        {
+                                            try
+                                            {
+                                                File.Delete(filePath);
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                Log.Error("Failed to delete file: " + ex.Message);
+                                            }
+                                        }
                                         else
                                             Log.Error("File not found: " + str[2] + " in " + Kernel.curPath);
+                                    }
                                     else
                                         Log.Error("No arguments specified. Use \"fs del <file>\"");
                                     break;
@@ -179,6 +265,51 @@ namespace Epsilon.System.Shell
                         break;
                 }
             }
+        }
+
+        private static bool TryGetSafePath(string relativeSegment, out string fullPath)
+        {
+            fullPath = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(relativeSegment))
+            {
+                Log.Error("Invalid path specified.");
+                return false;
+            }
+
+            if (relativeSegment.Contains("..")
+                || relativeSegment.Contains(':')
+                || relativeSegment.StartsWith("\\")
+                || relativeSegment.StartsWith("/"))
+            {
+                Log.Error("Invalid path specified.");
+                return false;
+            }
+
+            fullPath = Path.Combine(Kernel.curPath, relativeSegment);
+            return true;
+        }
+
+        private static string GetCommandArguments(string input, string[] tokens, int skipCount)
+        {
+            int index = 0;
+
+            for (int i = 0; i < skipCount && i < tokens.Length; i++)
+            {
+                int foundAt = input.IndexOf(tokens[i], index, StringComparison.Ordinal);
+                if (foundAt < 0)
+                    return string.Empty;
+
+                index = foundAt + tokens[i].Length;
+
+                while (index < input.Length && input[index] == ' ')
+                    index++;
+            }
+
+            if (index >= input.Length)
+                return string.Empty;
+
+            return input.Substring(index);
         }
     }
 }
