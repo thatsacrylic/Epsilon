@@ -32,7 +32,7 @@ jobs:
           dotnet-version: 6.0.x
 
       - name: Restore dependencies
-        run: dotnet restore Epsilon.sln --configfile nuget.config
+        run: dotnet restore Epsilon.sln
 
       - name: Build
         run: dotnet build Epsilon.sln --configuration Release --no-restore
