@@ -1,0 +1,45 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make yasm xorriso
+
+      - name: Build Cosmos toolchain
+        run: |
+          git clone https://github.com/CosmosOS/Cosmos.git
+          pushd Cosmos
+          make
+          popd
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore Epsilon.sln
+
+      - name: Build
+        run: dotnet build Epsilon.sln --configuration Release --no-restore
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: epsilon-release-iso
+          path: bin/Release/net6.0/**/*.iso
+          if-no-files-found: error
